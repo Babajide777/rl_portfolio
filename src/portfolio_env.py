@@ -269,8 +269,26 @@ class PortfolioEnv(gym.Env):
         )
 
 
-def make_env(price_relatives, penalty_weight: float, **kw):
-    """Factory returning a zero-argument callable, as VecEnv requires."""
+def make_env(price_relatives, penalty_weight: float,
+             monitor_path: str | None = None, **kw):
+    """Factory returning a zero-argument callable, as VecEnv requires.
+
+    The environment is wrapped in Stable-Baselines3's ``Monitor``, which
+    records episode return, length and duration and exposes them to the
+    training loop. Without it, no ``rollout/*`` statistics are logged: the
+    optimiser diagnostics under ``train/*`` would still appear, but there
+    would be no record of whether the agent is actually improving at the
+    task, and no training curve to report.
+    """
     def _init():
-        return PortfolioEnv(price_relatives, penalty_weight=penalty_weight, **kw)
+        env = PortfolioEnv(price_relatives, penalty_weight=penalty_weight, **kw)
+        try:
+            from stable_baselines3.common.monitor import Monitor
+        except ImportError:      # keep the package usable without SB3
+            return env
+        # info_keywords surfaces per-episode turnover and cost alongside the
+        # standard return/length, so behaviour can be tracked during training
+        # rather than only reconstructed at evaluation.
+        return Monitor(env, filename=monitor_path,
+                       info_keywords=("turnover", "cost"))
     return _init

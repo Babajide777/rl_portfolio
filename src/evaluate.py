@@ -254,6 +254,40 @@ def make_figures(df: pd.DataFrame, baselines: dict[str, pd.DataFrame]) -> None:
     fig.savefig(fig_dir / "fig2_eta_tradeoff.png", dpi=200)
     plt.close(fig)
 
+    # Figure 4: training curves from the Monitor logs
+    curves = {}
+    for run in cfg.all_runs():
+        mdir = run.dir / "monitor"
+        if not mdir.exists():
+            continue
+        frames = []
+        for f in sorted(mdir.glob("*.csv")):
+            try:
+                frames.append(pd.read_csv(f, skiprows=1))
+            except Exception:
+                continue
+        if frames:
+            d = pd.concat(frames).sort_values("t")
+            curves.setdefault(run.eta_multiple, []).append(d)
+
+    if curves:
+        fig, (b1, b2) = plt.subplots(1, 2, figsize=(11, 4.5))
+        for mult in sorted(curves):
+            d = pd.concat(curves[mult]).sort_values("t").reset_index(drop=True)
+            w = max(len(d) // 50, 1)
+            lbl = "cost-blind (eta = 0)" if mult == 0 else f"eta = {mult:g}c"
+            b1.plot(d["r"].rolling(w, min_periods=1).mean().to_numpy(), label=lbl, lw=1.4)
+            b2.plot(d["turnover"].rolling(w, min_periods=1).mean().to_numpy(), label=lbl, lw=1.4)
+        b1.set_xlabel("Episode"); b1.set_ylabel("Episode return")
+        b1.set_title("Training reward")
+        b2.set_xlabel("Episode"); b2.set_ylabel("Mean turnover per step")
+        b2.set_title("Turnover during training")
+        for a in (b1, b2):
+            a.grid(alpha=0.3); a.legend(fontsize=8)
+        fig.tight_layout()
+        fig.savefig(fig_dir / "fig4_training_curves.png", dpi=200)
+        plt.close(fig)
+
     # Figure 3: validation curves, evidencing the training budget
     if (cfg.RESULTS_DIR / "checkpoint_selection.csv").exists():
         fig, ax = plt.subplots(figsize=(9, 4.5))

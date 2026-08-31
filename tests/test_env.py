@@ -309,3 +309,49 @@ def test_history_disabled_by_default(rel, actions):
         env2.step(a)
     assert len(env2._history) == 30
     assert "weights" in env2._history[-1]
+
+
+def test_make_env_wraps_in_monitor(rel, tmp_path):
+    """REGRESSION TEST.
+
+    Without a Monitor wrapper, Stable-Baselines3 logs no ``rollout/*``
+    statistics: the optimiser diagnostics under ``train/*`` still appear, so
+    training looks healthy, but there is no record of episode return and
+    therefore no training curve. The absence is silent, which is why it is
+    asserted here.
+    """
+    pytest.importorskip("stable_baselines3")
+    from stable_baselines3.common.monitor import Monitor
+    from src.portfolio_env import make_env
+
+    env = make_env(rel, penalty_weight=0.005,
+                   monitor_path=str(tmp_path / "env0"))()
+    assert isinstance(env, Monitor)
+    # training must not accumulate history through the wrapper
+    assert env.unwrapped.record_history is False
+
+
+def test_monitor_records_episode_statistics(rel, tmp_path):
+    """Monitor must emit episode return, length, turnover and cost."""
+    pytest.importorskip("stable_baselines3")
+    from src.portfolio_env import make_env
+
+    env = make_env(rel, penalty_weight=0.005,
+                   monitor_path=str(tmp_path / "env0"))()
+    env.reset(seed=0)
+    rng = np.random.default_rng(1)
+    info = {}
+    for _ in range(len(rel)):
+        _, _, term, trunc, info = env.step(rng.normal(size=9))
+        if term or trunc:
+            break
+
+    assert "episode" in info, "Monitor did not emit episode statistics"
+    for key in ("r", "l", "t"):
+        assert key in info["episode"]
+
+    csvs = list(tmp_path.glob("*.csv"))
+    assert csvs, "Monitor wrote no CSV"
+    header = csvs[0].read_text().splitlines()[1]
+    for field in ("r", "l", "t", "turnover", "cost"):
+        assert field in header, f"'{field}' absent from monitor CSV"

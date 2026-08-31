@@ -38,7 +38,8 @@ def _sb3():
 
 
 def build_vec_env(train_rel, penalty_weight: float, seed: int,
-                  n_envs: int = cfg.N_ENVS, subproc: bool = True):
+                  n_envs: int = cfg.N_ENVS, subproc: bool = True,
+                  monitor_dir=None):
     """Vectorised, observation-normalised training environment.
 
     Observation normalisation is enabled because the two components of the
@@ -49,9 +50,21 @@ def build_vec_env(train_rel, penalty_weight: float, seed: int,
     Reward normalisation is DISABLED. Rescaling the reward would distort the
     very quantity under experimental manipulation, and would make rewards
     incomparable across penalty weights.
+
+    Each environment is wrapped in ``Monitor`` (see ``make_env``), which is
+    what produces the ``rollout/ep_rew_mean`` series used for the training
+    curves in Chapter 5.
     """
     _, _, DummyVecEnv, SubprocVecEnv, VecNormalize = _sb3()
-    fns = [make_env(train_rel, penalty_weight) for _ in range(n_envs)]
+    # Each environment writes its own monitor CSV so per-episode return,
+    # length, turnover and cost are recoverable after training.
+    fns = [
+        make_env(
+            train_rel, penalty_weight,
+            monitor_path=(str(monitor_dir / f"env{i}") if monitor_dir else None),
+        )
+        for i in range(n_envs)
+    ]
     # SubprocVecEnv gives true parallelism but pays inter-process overhead;
     # for a cheap env DummyVecEnv can be faster. Benchmark both.
     venv = SubprocVecEnv(fns) if (subproc and n_envs > 1) else DummyVecEnv(fns)
@@ -70,7 +83,10 @@ def train_one(run: cfg.RunConfig, train_rel, n_envs: int = cfg.N_ENVS,
              run.label, run.penalty_weight, run.eta_multiple,
              run.seed, f"{run.total_timesteps:,}")
 
-    env = build_vec_env(train_rel, run.penalty_weight, run.seed, n_envs, subproc)
+    monitor_dir = out / "monitor"
+    monitor_dir.mkdir(parents=True, exist_ok=True)
+    env = build_vec_env(train_rel, run.penalty_weight, run.seed, n_envs,
+                        subproc, monitor_dir=monitor_dir)
 
     # Resume from the most recent checkpoint if one exists. Without this an
     # interruption at 90% of a 2M-step run costs the entire run.
