@@ -109,6 +109,11 @@ class PortfolioEnv(gym.Env):
         # costs roughly 1.3 GB across eight environments over two million
         # steps. Evaluation and checkpoint selection opt in explicitly.
         self.record_history = bool(record_history)
+        # Vectorised wrappers auto-reset the moment an episode ends, which
+        # would otherwise discard the completed episode before the caller can
+        # read it. The finished record is carried over here.
+        self._history: list[dict] = []
+        self._last_history: list[dict] = []
 
         obs_dim = self.L * self.n + self.n
         self.observation_space = spaces.Box(
@@ -143,7 +148,12 @@ class PortfolioEnv(gym.Env):
         # Equal-weight initialisation: no asset is privileged at the outset.
         self._w = np.full(self.n, 1.0 / self.n)
         self.floor_events = 0
-        self._history: list[dict] = []
+        # Preserve the episode just finished before clearing. DummyVecEnv and
+        # SubprocVecEnv call reset() automatically on termination, so without
+        # this the caller reads an empty history.
+        if self._history:
+            self._last_history = self._history
+        self._history = []
         return self._observe(), {"date": self._date()}
 
     def step(
@@ -242,12 +252,13 @@ class PortfolioEnv(gym.Env):
     @property
     def history(self) -> pd.DataFrame:
         """Per-step record of the current episode."""
-        if not self._history:
+        rows = self._history or self._last_history
+        if not rows:
             return pd.DataFrame()
         df = pd.DataFrame([
-            {k: v for k, v in h.items() if k != "weights"} for h in self._history
+            {k: v for k, v in h.items() if k != "weights"} for h in rows
         ])
-        w = np.vstack([h["weights"] for h in self._history])
+        w = np.vstack([h["weights"] for h in rows])
         for i in range(self.n):
             df[f"w_{cfg.ASSETS[i]}" if self.n == len(cfg.ASSETS) else f"w_{i}"] = w[:, i]
         if "date" in df and df["date"].notna().all():

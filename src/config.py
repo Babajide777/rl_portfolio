@@ -88,7 +88,6 @@ LOGIT_BOUND: float = 10.0
 # ---------------------------------------------------------------------------
 SEEDS: tuple[int, ...] = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 TOTAL_TIMESTEPS: int = 2_000_000
-# TOTAL_TIMESTEPS: int = 500_000
 N_ENVS: int = 8                    # parallel environments; tune to core count
 CHECKPOINT_EVERY: int = 50_000     # environment steps between checkpoints
 

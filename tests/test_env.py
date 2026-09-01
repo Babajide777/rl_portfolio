@@ -355,3 +355,42 @@ def test_monitor_records_episode_statistics(rel, tmp_path):
     header = csvs[0].read_text().splitlines()[1]
     for field in ("r", "l", "t", "turnover", "cost"):
         assert field in header, f"'{field}' absent from monitor CSV"
+
+
+def test_history_survives_vecenv_auto_reset(rel):
+    """REGRESSION TEST.
+
+    DummyVecEnv and SubprocVecEnv call ``reset()`` automatically the moment
+    an episode terminates. Since ``reset()`` clears the history list, the
+    completed episode was being discarded before the caller could read it,
+    and ``env.history`` returned an empty DataFrame. Evaluation then failed
+    with ``KeyError: 'portfolio_value'``.
+
+    The completed episode must survive the auto-reset.
+    """
+    pytest.importorskip("stable_baselines3")
+    from stable_baselines3.common.vec_env import DummyVecEnv
+
+    env = PortfolioEnv(rel, record_history=True)
+    vec = DummyVecEnv([lambda: env])
+    vec.reset()
+
+    rng = np.random.default_rng(1)
+    done, n = False, 0
+    while not done:
+        _, _, dones, _ = vec.step(rng.normal(size=(1, 9)))
+        n += 1
+        done = bool(dones[0])
+
+    hist = env.history
+    assert len(hist) == n, "history lost to auto-reset"
+    for col in ("portfolio_value", "turnover", "cost", "gross_return"):
+        assert col in hist.columns, f"'{col}' missing from history"
+
+
+def test_history_attribute_exists_before_first_reset(rel):
+    """``_history`` must exist from construction, not only after reset()."""
+    env = PortfolioEnv(rel, record_history=True)
+    assert hasattr(env, "_history")
+    assert hasattr(env, "_last_history")
+    env.reset(seed=0)      # must not raise
