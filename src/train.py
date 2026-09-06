@@ -151,7 +151,11 @@ def train_one(run: cfg.RunConfig, train_rel, n_envs: int = cfg.N_ENVS,
         "seed": run.seed,
         "total_timesteps": run.total_timesteps,
         "n_envs": n_envs,
-        "device": cfg.DEVICE,
+        "device_requested": cfg.DEVICE,
+        # Stable-Baselines3 falls back to CPU silently when the requested
+        # device is unavailable (utils.get_device), so record what was
+        # actually used rather than what was asked for.
+        "device_used": str(model.device),
         "wall_clock_seconds": round(elapsed, 1),
         "resumed_from_steps": completed_steps,
         "fps": round(remaining / elapsed, 1),

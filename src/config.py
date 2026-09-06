@@ -113,7 +113,12 @@ PPO_KWARGS: dict = {
 # host-device transfer costs more than it saves. Benchmark both before
 # committing (see scripts/benchmark.py).
 # DEVICE: str = "cpu"
-DEVICE: str = "cuda"
+# "auto" lets Stable-Baselines3 choose; it resolves to CUDA only where a
+# CUDA device is genuinely present. Note that requesting "cuda" explicitly on
+# a machine without one does NOT raise: SB3 silently returns CPU, so a run
+# can appear to be on GPU while executing on CPU. train.py therefore records
+# the resolved device in metadata.json.
+DEVICE: str = "auto"
 
 # PyTorch spawns multiple threads per operation by default. With a small MLP
 # the per-operation work is tiny, so thread coordination overhead exceeds any

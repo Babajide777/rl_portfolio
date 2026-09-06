@@ -78,7 +78,17 @@ def rollout(run: cfg.RunConfig, rel: pd.DataFrame,
         obs, _, dones, _ = vec.step(action)
         done = bool(dones[0])
     vec.close()
-    return env.history
+
+    hist = env.history
+    # Attach environment diagnostics promised in Sections 3.4 and 4.9. The
+    # epsilon floor should never activate on price movement alone -- the
+    # worst price relative in the sample is 0.7468 -- so a non-zero count
+    # would indicate the penalty, not the data, driving the argument of the
+    # logarithm non-positive.
+    hist.attrs["floor_events"] = int(env.total_floor_events)
+    hist.attrs["ruin_episodes"] = int(env.ruin_episodes)
+    hist.attrs["episodes"] = int(env.episodes)
+    return hist
 
 
 def evaluate_run(run: cfg.RunConfig, test_rel: pd.DataFrame,
@@ -87,7 +97,9 @@ def evaluate_run(run: cfg.RunConfig, test_rel: pd.DataFrame,
     hist = rollout(run, test_rel, use_final_model=use_final_model)
     m = mt.compute_metrics(hist)
     m.update({"label": run.label, "eta": run.penalty_weight,
-              "eta_multiple": run.eta_multiple, "seed": run.seed})
+              "eta_multiple": run.eta_multiple, "seed": run.seed,
+              "floor_events": hist.attrs.get("floor_events", 0),
+              "ruin_episodes": hist.attrs.get("ruin_episodes", 0)})
     hist.to_csv(run.dir / "test_history.csv")
     return m
 
@@ -384,6 +396,14 @@ def main() -> None:
         make_figures(agents, base)
         best = agents.loc[agents["sharpe"].idxmax(), "label"]
         quantstats_report(best)
+
+    if "floor_events" in agents.columns:
+        fe, re_ = int(agents["floor_events"].sum()), int(agents["ruin_episodes"].sum())
+        log.info("Environment diagnostics across %d runs: %d log-floor "
+                 "activation(s), %d ruin termination(s)", len(agents), fe, re_)
+        if fe:
+            log.warning("The epsilon floor activated %d time(s); inspect whether "
+                        "the penalty drove the log argument non-positive", fe)
 
     log.info("Results written to %s", cfg.RESULTS_DIR)
 
