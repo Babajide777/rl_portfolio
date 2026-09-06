@@ -35,7 +35,14 @@ fails under the conflated formulation.
 ## Installation
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+
+# Unix / macOS
+source .venv/bin/activate
+
+# Windows (PowerShell)
+.\.venv\Scripts\Activate.ps1
+
 pip install -r requirements.txt
 ```
 
@@ -57,6 +64,9 @@ python -m src.train
 
 # 5. Evaluate, compare against baselines, run statistical tests
 python -m src.evaluate
+
+# 6. (Optional) Rebuild Chapter 5 figures from existing CSVs without re-rolling out
+python scripts/regen_figures.py
 ```
 
 Training is genuinely resumable. Completed runs are skipped; an interrupted
@@ -80,7 +90,11 @@ src/evaluate.py        Rollout, cost sensitivity, statistics, figures.
 tests/test_env.py      Environment verification tests.
 tests/test_selection.py Checkpoint selection and evaluation path tests.
 scripts/benchmark.py   CPU/GPU and vectorisation throughput comparison.
+scripts/regen_figures.py Rebuild figures from saved evaluation CSVs.
 ```
+
+A local `pics/` folder (if present) is for personal notes only and is
+gitignored; it is not part of the reproducible codebase.
 
 ## Experimental design
 
@@ -130,12 +144,14 @@ comparisons.
 
 `scripts/benchmark.py` sweeps device, environment count, vectorisation class
 and PyTorch thread count, then reports the fastest configuration and a
-projected total runtime for the batch. Two findings are typical for this
-workload and worth knowing before committing compute:
+projected total runtime for the batch. Findings worth knowing before
+committing compute:
 
-- **CPU usually beats GPU.** The policy is a `[64, 64]` MLP, so the bottleneck
-  is environment stepping rather than network computation, and host-device
-  transfer costs more than it saves.
+- **Benchmark before choosing device.** The policy is a `[64, 64]` MLP, so
+  environment stepping often dominates network compute; either CPU or GPU can
+  win depending on the machine. This project uses `DEVICE = "auto"` in
+  `src/config.py` (and records the resolved device in each run’s
+  `metadata.json`).
 - **PyTorch threading matters.** Multithreaded operations on a tiny network
   contend with the vectorised environments for the same cores.
   `TORCH_NUM_THREADS = 1` is a documented Stable-Baselines3 tip for exactly
@@ -158,6 +174,61 @@ This is why the training budget is a ceiling rather than a target: if the
 selected checkpoint sits well short of 2M steps, the budget was ample and
 further training degraded generalisation. `results/figures/fig3` plots the
 validation curves that evidence this.
+
+## What to expect after evaluate
+
+After a successful `python -m src.evaluate` (or after regenerating figures):
+
+| Artefact | Role |
+|---|---|
+| `results/agent_metrics.csv` | Per-seed test metrics for all agents |
+| `results/baseline_metrics.csv` | Classical / rule-based baselines |
+| `results/checkpoint_selection.csv` | Validation-selected checkpoints |
+| `results/statistical_tests.json` | Level 1 / Level 2 / pairwise protocol |
+| `results/cost_sensitivity.csv` | Fixed policies re-scored at alternative cost rates |
+| `results/partition_boundaries.csv` | Train / val / test date ranges |
+| `results/figures/fig1_equity_curves.png` | Test equity curves |
+| `results/figures/fig2_eta_tradeoff.png` | Sharpe vs turnover by η |
+| `results/figures/fig3_validation_curves.png` | Validation Sharpe during training |
+| `results/figures/fig4_training_curves.png` | Monitor reward / turnover |
+| `results/tearsheet_*.html` | QuantStats report for the best seed |
+
+Per-run detail lives under `runs/<label>/` (histories, selection JSON, models).
+
+## Sending this to a supervisor
+
+- **GitHub** carries the **code** only (`src/`, `tests/`, `scripts/`, READMEs,
+  `requirements.txt`). Experiment outputs under `runs/`, `results/`, and
+  `data/` are gitignored because they are large and regenerable.
+- **Attach a results zip** separately when sharing findings. Include
+  `results/**` (tables, figures, tearsheet) and, optionally, light provenance
+  from each run (`config.json`, `metadata.json`, `checkpoint_selection.json`).
+  Do **not** send `.venv/`, full `checkpoints/`, `model.zip` trees, or
+  TensorBoard logs unless specifically requested.
+
+Example (PowerShell, from this directory):
+
+```powershell
+Compress-Archive -Path results -DestinationPath ..\rl_portfolio_results.zip -Force
+```
+
+To include light run provenance as well:
+
+```powershell
+$staging = Join-Path $env:TEMP "rl_portfolio_submission"
+Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+New-Item $staging -ItemType Directory | Out-Null
+Copy-Item results $staging -Recurse
+Get-ChildItem runs -Directory | ForEach-Object {
+  $dest = Join-Path $staging "runs\$($_.Name)"
+  New-Item $dest -ItemType Directory -Force | Out-Null
+  foreach ($f in "config.json","metadata.json","checkpoint_selection.json") {
+    $src = Join-Path $_.FullName $f
+    if (Test-Path $src) { Copy-Item $src $dest }
+  }
+}
+Compress-Archive -Path "$staging\*" -DestinationPath ..\rl_portfolio_results.zip -Force
+```
 
 ## Reproducibility
 
