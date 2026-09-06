@@ -65,7 +65,10 @@ python -m src.train
 # 5. Evaluate, compare against baselines, run statistical tests
 python -m src.evaluate
 
-# 6. (Optional) Rebuild Chapter 5 figures from existing CSVs without re-rolling out
+# 6. Allocation and trade-off analysis (Objectives 2 and 5)
+python scripts/allocation_analysis.py
+
+# 7. (Optional) Rebuild Chapter 5 figures from existing CSVs without re-rolling out
 python scripts/regen_figures.py
 ```
 
@@ -91,6 +94,9 @@ tests/test_env.py      Environment verification tests.
 tests/test_selection.py Checkpoint selection and evaluation path tests.
 scripts/benchmark.py   CPU/GPU and vectorisation throughput comparison.
 scripts/regen_figures.py Rebuild figures from saved evaluation CSVs.
+scripts/allocation_analysis.py
+                       Allocation and turnover/return trade-off analysis
+                       (Objectives 2 and 5). Run after src.evaluate.
 ```
 
 A local `pics/` folder (if present) is for personal notes only and is
@@ -195,6 +201,15 @@ After a successful `python -m src.evaluate` (or after regenerating figures):
 
 Per-run detail lives under `runs/<label>/` (histories, selection JSON, models).
 
+Running `scripts/allocation_analysis.py` additionally produces:
+
+- `results/weight_summary.csv` — per-run mean, terminal and s.d. of each asset weight
+- `results/allocation_by_condition.csv` — mean and terminal allocation per condition
+- `results/tradeoff_regression.json` — departure tests and the turnover/Sharpe regression
+- `results/figures/fig5_allocation_heatmap.png`, `fig6_turnover_tradeoff.png`
+
+It reads `runs/*/test_history.csv`, so run it after `src.evaluate`.
+
 ## Sending this to a supervisor
 
 - **GitHub** carries the **code** only (`src/`, `tests/`, `scripts/`, READMEs,
@@ -212,7 +227,9 @@ Example (PowerShell, from this directory):
 Compress-Archive -Path results -DestinationPath ..\rl_portfolio_results.zip -Force
 ```
 
-To include light run provenance as well:
+To include light run provenance as well. `test_history.csv` is included
+because `scripts/allocation_analysis.py` reads it, so its inclusion lets a
+reviewer reproduce the allocation and trade-off results without the models:
 
 ```powershell
 $staging = Join-Path $env:TEMP "rl_portfolio_submission"
@@ -222,7 +239,8 @@ Copy-Item results $staging -Recurse
 Get-ChildItem runs -Directory | ForEach-Object {
   $dest = Join-Path $staging "runs\$($_.Name)"
   New-Item $dest -ItemType Directory -Force | Out-Null
-  foreach ($f in "config.json","metadata.json","checkpoint_selection.json") {
+  foreach ($f in "config.json","metadata.json","checkpoint_selection.json",
+                 "test_history.csv") {
     $src = Join-Path $_.FullName $f
     if (Test-Path $src) { Copy-Item $src $dest }
   }
