@@ -258,9 +258,12 @@ Compress-Archive -Path "$staging\*" -DestinationPath ..\rl_portfolio_results.zip
   produces a silent, severe performance collapse on reload
 
 Determinism caveat: seeding fixes initialisation and sampling, but bitwise
-reproduction additionally requires identical library versions and, on GPU,
-deterministic kernel selection. Results are reproducible in distribution
-rather than bitwise across differing hardware.
+reproduction requires more. It additionally needs identical library versions,
+since floating-point accumulation order can differ between releases, and an
+identical `TORCH_NUM_THREADS`, since parallel reduction order is not stable
+across differing degrees of parallelism. On a CUDA device it further requires
+deterministic kernel selection. Results are therefore reproducible in
+distribution rather than bitwise across differing hardware or settings.
 
 ## Notes
 

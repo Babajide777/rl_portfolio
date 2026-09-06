@@ -3,7 +3,7 @@ Evaluation: validation-based checkpoint selection, deterministic test
 rollout, cost sensitivity, baseline comparison and the two-level statistical
 protocol.
 
-Implements Sections 3.5, 3.7 and 4.7.
+Implements Sections 3.5, 3.7, 4.6 and 4.8.
 
 Pipeline order matters. Checkpoint selection consults the VALIDATION
 partition only; the test partition is touched exactly once, after selection
@@ -80,7 +80,7 @@ def rollout(run: cfg.RunConfig, rel: pd.DataFrame,
     vec.close()
 
     hist = env.history
-    # Attach environment diagnostics promised in Sections 3.4 and 4.9. The
+    # Attach environment diagnostics promised in Sections 3.4 and 4.4. The
     # epsilon floor should never activate on price movement alone -- the
     # worst price relative in the sample is 0.7468 -- so a non-zero count
     # would indicate the penalty, not the data, driving the argument of the

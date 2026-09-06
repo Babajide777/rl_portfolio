@@ -1,7 +1,7 @@
 """
 Classical and rule-based baseline strategies.
 
-Implements Section 4.6. Every baseline is evaluated on the identical test
+Implements Section 4.7. Every baseline is evaluated on the identical test
 partition and charged at the identical cost rate, so that all reported
 figures are directly comparable with the agents'.
 
